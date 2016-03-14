@@ -12,7 +12,7 @@ The server is available for express [here](https://github.com/baptistemanson/red
 
 ```javascript
 //client.js
-var SyncReduxClient = require('redux-share').client;
+var SyncReduxClient = require('redux-share-client');
 
 var syncReduxClient = new SyncReduxClient('ws://localhost:2000');
 
