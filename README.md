@@ -1,6 +1,9 @@
 # redux-share
 Share redux state across the network between multiple clients and server!
 
+The system is currently provided with an express middleware for the server side implementation, while the client is agnostic.
+
+This package is experimental and API will change.
 
 ## Server
 
@@ -38,9 +41,10 @@ store.dispatch({type:"@@SYNC-CONNECT-SERVER-START"});
 
 ```
 
-## Example of a reducer on the server to handle client connection
+## Example of a reducer server side
 
 ```javascript
+//will replicate on the server-side the client-side state.
 function reducer(state = {} , action) { 
 	if(action.type === "@@SYNC-CONNECT-SERVER-END") return action.state;
 }

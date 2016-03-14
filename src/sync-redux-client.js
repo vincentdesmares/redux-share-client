@@ -1,3 +1,5 @@
+//standardize to work the same way as the server
+
 export default class SyncReduxClient {
 	constructor(url) {
 		this.url = url;
@@ -38,3 +40,4 @@ export default class SyncReduxClient {
 		}
 	}
 }
+
