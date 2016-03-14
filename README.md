@@ -8,7 +8,7 @@ This package is experimental and API will change.
 
 The client a bit more complex, as your need to sync your state with the server upon connection.
 
-The server is available for express [https://github.com/baptistemanson/redux-share-server](here)
+The server is available for express [here](https://github.com/baptistemanson/redux-share-server)
 
 ```javascript
 //client.js
@@ -21,6 +21,7 @@ store = createStore(reducer,applyMiddleware(syncReduxClient.getClientMiddleware(
 
 //open a socket to the server, then dump the state to the server
 store.dispatch({type:"@@SYNC-CONNECT-SERVER-START"});
+```
 
 
 ## List of special actions (client)
