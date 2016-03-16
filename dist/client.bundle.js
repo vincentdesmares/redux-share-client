@@ -56,10 +56,6 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	"use strict";
 
-	Object.defineProperty(exports, "__esModule", {
-		value: true
-	});
-
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
@@ -67,66 +63,85 @@ return /******/ (function(modules) { // webpackBootstrap
 	//standardize to work the same way as the server
 
 	var SyncReduxClient = function () {
-		function SyncReduxClient(url) {
-			_classCallCheck(this, SyncReduxClient);
+	  function SyncReduxClient(url) {
+	    _classCallCheck(this, SyncReduxClient);
 
-			this.url = url;
-			this.readyToSend = false;
-		}
+	    this.url = url;
+	    this.readyToSend = false;
+	    this.debug = false;
+	  }
 
-		_createClass(SyncReduxClient, [{
-			key: "init",
-			value: function init(store) {
-				var _this = this;
+	  _createClass(SyncReduxClient, [{
+	    key: "setDebug",
+	    value: function setDebug() {
+	      var debug = arguments.length <= 0 || arguments[0] === undefined ? false : arguments[0];
 
-				this.ws = new WebSocket(this.url);
-				this.store = store;
-				this.ws.onopen = function () {
-					console.log("Sync connected!");
-					//send a state dump
-					this.readyToSend = true;
-					var state = this.store.getState() || {};
-					this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-END", state: state });
-				}.bind(this);
+	      this.debug = debug;
+	    }
+	  }, {
+	    key: "init",
+	    value: function init(store) {
+	      var _this = this;
 
-				this.ws.onmessage = function (event) {
-					console.log("Sync: Received some stuff from the server", event.data);
-					_this.store.dispatch(JSON.parse(event.data));
-				};
-				this.ws.onclose = function () {
-					return setTimeout(_this.init.bind(_this), 1000);
-				};
-			}
-		}, {
-			key: "send",
-			value: function send(action) {
-				this.ws.send(JSON.stringify(action));
-			}
-		}, {
-			key: "getClientMiddleware",
-			value: function getClientMiddleware() {
-				var _this2 = this;
+	      this.ws = new WebSocket(this.url);
+	      this.store = store;
+	      this.ws.onopen = function () {
+	        if (this.debug) {
+	          console.log("Sync connected!");
+	        }
+	        //send a state dump
+	        this.readyToSend = true;
+	        var state = this.store.getState() || {};
+	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-END", state: state });
+	      }.bind(this);
 
-				return function (store) {
-					return function (next) {
-						return function (action) {
-							//need to enrich next action.
-							console.log('Sync: dispatching ', action);
-							var result = next(action);
-							if (_this2.readyToSend) _this2.send(action);
-							//should be migrated to a reducer?
-							if (action.type === "@@SYNC-CONNECT-SERVER-START") _this2.init(store);
-							return result;
-						};
-					};
-				};
-			}
-		}]);
+	      this.ws.onmessage = function (event) {
+	        if (_this.debug) {
+	          console.log("Sync: Received some stuff from the server", event.data);
+	        }
+	        _this.store.dispatch(JSON.parse(event.data));
+	      };
+	      this.ws.onclose = function () {
+	        return setTimeout(_this.init.bind(_this), 1000);
+	      };
+	    }
+	  }, {
+	    key: "send",
+	    value: function send(action) {
+	      this.ws.send(JSON.stringify(action));
+	    }
+	  }, {
+	    key: "getClientMiddleware",
+	    value: function getClientMiddleware() {
+	      var _this2 = this;
 
-		return SyncReduxClient;
+	      return function (store) {
+	        return function (next) {
+	          return function (action) {
+	            //need to enrich next action.
+	            if (_this2.debug) {
+	              console.log('Sync: dispatching ', action);
+	            }
+	            var result = next(action);
+	            // If the action have been already emited, we don't send it back to the server
+	            if (_this2.readyToSend && action.senderId === undefined) {
+	              _this2.send(action);
+	            }
+	            //should be migrated to a reducer?
+	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this2.init(store);
+	            return result;
+	          };
+	        };
+	      };
+	    }
+	  }]);
+
+	  return SyncReduxClient;
 	}();
 
-	exports.default = SyncReduxClient;
+	;
+
+	module.exports = SyncReduxClient;
 
 /***/ }
 /******/ ])
