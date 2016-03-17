@@ -175,7 +175,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	              _this2.send(action);
 	            }
 	            //should be migrated to a reducer?
-	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this2.init();
+	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this2.init(store);
 	            return result;
 	          };
 	        };
