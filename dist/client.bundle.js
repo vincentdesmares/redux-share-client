@@ -99,12 +99,8 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	      var store = arguments.length <= 0 || arguments[0] === undefined ? null : arguments[0];
 
-	      try {
-	        this.ws = new WebSocket(this.url);
-	      } catch (e) {
-	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: this.url });
-	        return;
-	      }
+	      this.ws = new WebSocket(this.url);
+
 	      // No store previously declared
 	      if (this.store === null) {
 	        if (store === null) {
@@ -117,6 +113,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	        } else {
 	          // Store already defined but param null, ignoring
 	        }
+
+	      this.ws.onerror = function () {
+	        _this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: _this.url });
+	      };
+
 	      this.ws.onopen = function () {
 	        if (this.debug) {
 	          console.log("Sync connected!");
