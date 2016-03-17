@@ -69,7 +69,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	    this.url = url;
 	    this.readyToSend = false;
 	    this.debug = false;
+	    this.autoReconnect = true;
 	  }
+
+	  /**
+	   * Set if the client must send debug information to the console
+	   * @param debug
+	   */
+
 
 	  _createClass(SyncReduxClient, [{
 	    key: "setDebug",
@@ -78,12 +85,23 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	      this.debug = debug;
 	    }
+
+	    /**
+	     * Init a connection with the server
+	     * @param store
+	     */
+
 	  }, {
 	    key: "init",
 	    value: function init(store) {
 	      var _this = this;
 
-	      this.ws = new WebSocket(this.url);
+	      try {
+	        this.ws = new WebSocket(this.url);
+	      } catch (e) {
+	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: this.url });
+	        setTimeout(this.init.bind(this), 1000);
+	      }
 	      this.store = store;
 	      this.ws.onopen = function () {
 	        if (this.debug) {
@@ -102,14 +120,29 @@ return /******/ (function(modules) { // webpackBootstrap
 	        _this.store.dispatch(JSON.parse(event.data));
 	      };
 	      this.ws.onclose = function () {
-	        return setTimeout(_this.init.bind(_this), 1000);
+	        if (_this.autoReconnect) {
+	          setTimeout(_this.init.bind(_this), 1000);
+	        }
 	      };
 	    }
+
+	    /**
+	     * Send an action to the server
+	     *
+	     * @param action
+	     */
+
 	  }, {
 	    key: "send",
 	    value: function send(action) {
 	      this.ws.send(JSON.stringify(action));
 	    }
+
+	    /**
+	     * Middleware for Redux
+	     * @returns {Function}
+	     */
+
 	  }, {
 	    key: "getClientMiddleware",
 	    value: function getClientMiddleware() {
@@ -133,6 +166,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	          };
 	        };
 	      };
+	    }
+
+	    /**
+	     * Set the client behavior in case the socket connection is closed/notStarted
+	     * 
+	     * @param reconnect
+	     */
+
+	  }, {
+	    key: "setAutoReconnect",
+	    value: function setAutoReconnect(reconnect) {
+	      this.autoReconnect = reconnect;
 	    }
 	  }]);
 
