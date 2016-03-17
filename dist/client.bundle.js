@@ -67,6 +67,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    _classCallCheck(this, SyncReduxClient);
 
 	    this.url = url;
+	    this.store = null;
 	    this.readyToSend = false;
 	    this.debug = false;
 	    this.autoReconnect = true;
@@ -93,16 +94,29 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	  }, {
 	    key: "init",
-	    value: function init(store) {
+	    value: function init() {
 	      var _this = this;
+
+	      var store = arguments.length <= 0 || arguments[0] === undefined ? null : arguments[0];
 
 	      try {
 	        this.ws = new WebSocket(this.url);
 	      } catch (e) {
 	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: this.url });
-	        setTimeout(this.init.bind(this), 1000);
+	        return;
 	      }
-	      this.store = store;
+	      // No store previously declared
+	      if (this.store === null) {
+	        if (store === null) {
+	          throw 'A store is required when the server have never been initialised with it';
+	        }
+	        this.store = store;
+	        // Store already defined and param not null
+	      } else if (store !== null) {
+	          this.store = store;
+	        } else {
+	          // Store already defined but param null, ignoring
+	        }
 	      this.ws.onopen = function () {
 	        if (this.debug) {
 	          console.log("Sync connected!");
@@ -161,7 +175,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	              _this2.send(action);
 	            }
 	            //should be migrated to a reducer?
-	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this2.init(store);
+	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this2.init();
 	            return result;
 	          };
 	        };
@@ -170,7 +184,7 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	    /**
 	     * Set the client behavior in case the socket connection is closed/notStarted
-	     * 
+	     *
 	     * @param reconnect
 	     */
 
