@@ -65,6 +65,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	var SyncReduxClient = function () {
 	  function SyncReduxClient(url) {
 	    var autoReconnect = arguments.length <= 1 || arguments[1] === undefined ? true : arguments[1];
+	    var onPreSend = arguments.length <= 2 || arguments[2] === undefined ? null : arguments[2];
 
 	    _classCallCheck(this, SyncReduxClient);
 
@@ -73,6 +74,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    this.readyToSend = false;
 	    this.debug = false;
 	    this.autoReconnect = autoReconnect;
+	    this.onPreSend = onPreSend;
 	  }
 
 	  /**
@@ -152,6 +154,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	  }, {
 	    key: "send",
 	    value: function send(action) {
+	      if (this.onPreSend !== null && !this.onPreSend.apply(this, [action, this.ws])) {
+	        return;
+	      }
 	      this.ws.send(JSON.stringify(action));
 	    }
 
@@ -174,7 +179,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            var result = next(action);
 	            // If the action have been already emited, we don't send it back to the server
-	            if (_this2.readyToSend && action.senderId === undefined) {
+	            if (_this2.readyToSend) {
 	              _this2.send(action);
 	            }
 	            //should be migrated to a reducer?
