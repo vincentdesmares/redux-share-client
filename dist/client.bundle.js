@@ -64,13 +64,15 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var SyncReduxClient = function () {
 	  function SyncReduxClient(url) {
+	    var autoReconnect = arguments.length <= 1 || arguments[1] === undefined ? true : arguments[1];
+
 	    _classCallCheck(this, SyncReduxClient);
 
 	    this.url = url;
 	    this.store = null;
 	    this.readyToSend = false;
 	    this.debug = false;
-	    this.autoReconnect = true;
+	    this.autoReconnect = autoReconnect;
 	  }
 
 	  /**
@@ -181,18 +183,6 @@ return /******/ (function(modules) { // webpackBootstrap
 	          };
 	        };
 	      };
-	    }
-
-	    /**
-	     * Set the client behavior in case the socket connection is closed/notStarted
-	     *
-	     * @param reconnect
-	     */
-
-	  }, {
-	    key: "setAutoReconnect",
-	    value: function setAutoReconnect(reconnect) {
-	      this.autoReconnect = reconnect;
 	    }
 	  }]);
 
