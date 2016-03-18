@@ -64,12 +64,24 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	var SyncReduxClient = function () {
 	  function SyncReduxClient(url) {
+	    var autoReconnect = arguments.length <= 1 || arguments[1] === undefined ? true : arguments[1];
+	    var onPreSend = arguments.length <= 2 || arguments[2] === undefined ? null : arguments[2];
+
 	    _classCallCheck(this, SyncReduxClient);
 
 	    this.url = url;
+	    this.store = null;
 	    this.readyToSend = false;
 	    this.debug = false;
+	    this.autoReconnect = autoReconnect;
+	    this.onPreSend = onPreSend;
 	  }
+
+	  /**
+	   * Set if the client must send debug information to the console
+	   * @param debug
+	   */
+
 
 	  _createClass(SyncReduxClient, [{
 	    key: "setDebug",
@@ -78,13 +90,38 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	      this.debug = debug;
 	    }
+
+	    /**
+	     * Init a connection with the server
+	     * @param store
+	     */
+
 	  }, {
 	    key: "init",
-	    value: function init(store) {
+	    value: function init() {
 	      var _this = this;
 
+	      var store = arguments.length <= 0 || arguments[0] === undefined ? null : arguments[0];
+
 	      this.ws = new WebSocket(this.url);
-	      this.store = store;
+
+	      // No store previously declared
+	      if (this.store === null) {
+	        if (store === null) {
+	          throw 'A store is required when the server have never been initialised with it';
+	        }
+	        this.store = store;
+	        // Store already defined and param not null
+	      } else if (store !== null) {
+	          this.store = store;
+	        } else {
+	          // Store already defined but param null, ignoring
+	        }
+
+	      this.ws.onerror = function () {
+	        _this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: _this.url });
+	      };
+
 	      this.ws.onopen = function () {
 	        if (this.debug) {
 	          console.log("Sync connected!");
@@ -102,14 +139,32 @@ return /******/ (function(modules) { // webpackBootstrap
 	        _this.store.dispatch(JSON.parse(event.data));
 	      };
 	      this.ws.onclose = function () {
-	        return setTimeout(_this.init.bind(_this), 1000);
+	        if (_this.autoReconnect) {
+	          setTimeout(_this.init.bind(_this), 1000);
+	        }
 	      };
 	    }
+
+	    /**
+	     * Send an action to the server
+	     *
+	     * @param action
+	     */
+
 	  }, {
 	    key: "send",
 	    value: function send(action) {
+	      if (this.onPreSend !== null && !this.onPreSend.apply(this, [action, this.ws])) {
+	        return;
+	      }
 	      this.ws.send(JSON.stringify(action));
 	    }
+
+	    /**
+	     * Middleware for Redux
+	     * @returns {Function}
+	     */
+
 	  }, {
 	    key: "getClientMiddleware",
 	    value: function getClientMiddleware() {
@@ -124,7 +179,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            }
 	            var result = next(action);
 	            // If the action have been already emited, we don't send it back to the server
-	            if (_this2.readyToSend && action.senderId === undefined) {
+	            if (_this2.readyToSend) {
 	              _this2.send(action);
 	            }
 	            //should be migrated to a reducer?
