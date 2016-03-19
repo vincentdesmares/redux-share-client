@@ -60,11 +60,28 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-	//standardize to work the same way as the server
+	var ReduxShareClient = function () {
 
-	var SyncReduxClient = function () {
-	  function SyncReduxClient(url, options) {
-	    _classCallCheck(this, SyncReduxClient);
+	  /**
+	  * Constructs a new ReduxShareClient.
+	  *
+	  * @param string url a fully qualified websocket url.
+	  * @param options. 
+	  * 
+	  * defaultOptions = {
+	  *     //delay between reconnect tries
+	  *     autoReconnectDelay:1000,
+	  *     //null for unlimited autoReconnect, 0 will disable autoReconnect, 1 will try only once etc.
+	  *     autoReconnectMaxTries:null,
+	  *     //callback called just before sending to the server.
+	  *     shouldSend:null,
+	  *     debug:false,
+	  *   };
+	  *
+	  */
+
+	  function ReduxShareClient(url, options) {
+	    _classCallCheck(this, ReduxShareClient);
 
 	    //properties
 	    var defaultOptions = {
@@ -86,14 +103,33 @@ return /******/ (function(modules) { // webpackBootstrap
 	    this.connectTriesCount = 0;
 	  }
 
-	  _createClass(SyncReduxClient, [{
-	    key: 'log',
-	    value: function log() {
-	      if (this.options.debug) {
-	        var _console;
+	  /**
+	   * Get the middleware for Redux
+	   *
+	   * @returns {Function}
+	   */
 
-	        (_console = console).log.apply(_console, ["redux-share-client: "].concat(Array.prototype.slice.call(arguments)));
-	      }
+
+	  _createClass(ReduxShareClient, [{
+	    key: 'getClientMiddleware',
+	    value: function getClientMiddleware() {
+	      var _this = this;
+
+	      return function (store) {
+	        return function (next) {
+	          return function (action) {
+	            //need to enrich next action.
+	            var result = next(action);
+	            // If the action have been already emited, we don't send it back to the server
+	            if (_this.readyToSend) {
+	              _this.send(action);
+	            }
+	            //should be migrated to a reducer?
+	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this.init(store);
+	            return result;
+	          };
+	        };
+	      };
 	    }
 
 	    /**
@@ -104,7 +140,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  }, {
 	    key: 'init',
 	    value: function init() {
-	      var _this = this;
+	      var _this2 = this;
 
 	      var store = arguments.length <= 0 || arguments[0] === undefined ? null : arguments[0];
 
@@ -118,29 +154,52 @@ return /******/ (function(modules) { // webpackBootstrap
 	      this.store = store;
 
 	      this.ws.onerror = function () {
-	        _this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: _this.url });
+	        _this2.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: _this2.url });
 	      };
 
 	      this.ws.onopen = function () {
 	        this.log('Socket initialized, sending a dump of the full state to the server.');
 	        this.connectTriesCount = 0;
 	        //send a state dump
-	        this.readyToSend = true;
 	        var state = this.store.getState() || {};
-	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-END", state: state });
+	        this.readyToSend = true;
+	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-SUCCESS", state: state });
 	      }.bind(this);
 
 	      this.ws.onmessage = function (event) {
-	        _this.log("Received an action from the server", event.data);
-	        _this.store.dispatch(JSON.parse(event.data));
+	        _this2.log("Received an action from the server", event.data);
+	        _this2.store.dispatch(JSON.parse(event.data));
 	      };
 
 	      this.ws.onclose = function () {
-	        _this.readyToSend = false;
-	        _this.log("Socket closed.");
-	        _this.reconnect();
+	        _this2.readyToSend = false;
+	        _this2.log("Socket closed.");
+	        _this2.reconnect();
 	      };
 	    }
+
+	    /**
+	     * Sends an action to the server
+	     *
+	     * @param action
+	     */
+
+	  }, {
+	    key: 'send',
+	    value: function send(action) {
+	      if (typeof this.options.shouldSend == 'function' && !this.options.shouldSend(action)) {
+	        return;
+	      } else {
+	        this.log('Sending to the server the action ', action);
+	        this.ws.send(JSON.stringify(action));
+	      }
+	    }
+
+	    /**
+	    * Called internally.
+	    *
+	    */
+
 	  }, {
 	    key: 'reconnect',
 	    value: function reconnect() {
@@ -154,56 +213,27 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 
 	    /**
-	     * Sends an action to the server
-	     *
-	     * @param action
-	     */
+	    * Internal log function
+	    *
+	    */
 
 	  }, {
-	    key: 'send',
-	    value: function send(action) {
-	      if (typeof this.options.shouldSend == 'function' && !this.options.shouldSend.apply(this, [action, this.ws])) {
-	        return;
-	      } else {
-	        this.log('Sending to the server the action ', action);
-	        this.ws.send(JSON.stringify(action));
+	    key: 'log',
+	    value: function log() {
+	      if (this.options.debug) {
+	        var _console;
+
+	        (_console = console).log.apply(_console, ["redux-share-client: "].concat(Array.prototype.slice.call(arguments)));
 	      }
-	    }
-
-	    /**
-	     * Get the middleware for Redux
-	     * @returns {Function}
-	     */
-
-	  }, {
-	    key: 'getClientMiddleware',
-	    value: function getClientMiddleware() {
-	      var _this2 = this;
-
-	      return function (store) {
-	        return function (next) {
-	          return function (action) {
-	            //need to enrich next action.
-	            var result = next(action);
-	            // If the action have been already emited, we don't send it back to the server
-	            if (_this2.readyToSend) {
-	              _this2.send(action);
-	            }
-	            //should be migrated to a reducer?
-	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this2.init(store);
-	            return result;
-	          };
-	        };
-	      };
 	    }
 	  }]);
 
-	  return SyncReduxClient;
+	  return ReduxShareClient;
 	}();
 
 	;
 
-	module.exports = SyncReduxClient;
+	module.exports = ReduxShareClient;
 
 /***/ }
 /******/ ])
