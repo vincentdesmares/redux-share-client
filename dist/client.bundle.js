@@ -54,149 +54,186 @@ return /******/ (function(modules) { // webpackBootstrap
 /* 0 */
 /***/ function(module, exports) {
 
-	"use strict";
+	'use strict';
 
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-	//standardize to work the same way as the server
+	var ReduxShareClient = function () {
 
-	var SyncReduxClient = function () {
-	  function SyncReduxClient(url) {
-	    var autoReconnect = arguments.length <= 1 || arguments[1] === undefined ? true : arguments[1];
-	    var onPreSend = arguments.length <= 2 || arguments[2] === undefined ? null : arguments[2];
+	  /**
+	  * Constructs a new ReduxShareClient.
+	  *
+	  * @param string url a fully qualified websocket url.
+	  * @param options. 
+	  * 
+	  * defaultOptions = {
+	  *     //delay between reconnect tries
+	  *     autoReconnectDelay:1000,
+	  *     //null for unlimited autoReconnect, 0 will disable autoReconnect, 1 will try only once etc.
+	  *     autoReconnectMaxTries:null,
+	  *     //callback called just before sending to the server.
+	  *     shouldSend:null,
+	  *     debug:false,
+	  *   };
+	  *
+	  */
 
-	    _classCallCheck(this, SyncReduxClient);
+	  function ReduxShareClient(url, options) {
+	    _classCallCheck(this, ReduxShareClient);
 
+	    //properties
+	    var defaultOptions = {
+	      //delay between reconnect tries
+	      autoReconnectDelay: 1000,
+	      //null for unlimited autoReconnect, 0 will disable autoReconnect, 1 will try only once etc.
+	      autoReconnectMaxTries: null,
+	      //callback called just before sending to the server.
+	      shouldSend: null,
+	      debug: false
+	    };
+
+	    this.options = Object.assign({}, defaultOptions, options);
+
+	    //state
 	    this.url = url;
 	    this.store = null;
 	    this.readyToSend = false;
-	    this.debug = false;
-	    this.autoReconnect = autoReconnect;
-	    this.onPreSend = onPreSend;
+	    this.connectTriesCount = 0;
 	  }
 
 	  /**
-	   * Set if the client must send debug information to the console
-	   * @param debug
+	   * Get the middleware for Redux
+	   *
+	   * @returns {Function}
 	   */
 
 
-	  _createClass(SyncReduxClient, [{
-	    key: "setDebug",
-	    value: function setDebug() {
-	      var debug = arguments.length <= 0 || arguments[0] === undefined ? false : arguments[0];
-
-	      this.debug = debug;
-	    }
-
-	    /**
-	     * Init a connection with the server
-	     * @param store
-	     */
-
-	  }, {
-	    key: "init",
-	    value: function init() {
-	      var _this = this;
-
-	      var store = arguments.length <= 0 || arguments[0] === undefined ? null : arguments[0];
-
-	      this.ws = new WebSocket(this.url);
-
-	      // No store previously declared
-	      if (this.store === null) {
-	        if (store === null) {
-	          throw 'A store is required when the server have never been initialised with it';
-	        }
-	        this.store = store;
-	        // Store already defined and param not null
-	      } else if (store !== null) {
-	          this.store = store;
-	        } else {
-	          // Store already defined but param null, ignoring
-	        }
-
-	      this.ws.onerror = function () {
-	        _this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: _this.url });
-	      };
-
-	      this.ws.onopen = function () {
-	        if (this.debug) {
-	          console.log("Sync connected!");
-	        }
-	        //send a state dump
-	        this.readyToSend = true;
-	        var state = this.store.getState() || {};
-	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-END", state: state });
-	      }.bind(this);
-
-	      this.ws.onmessage = function (event) {
-	        if (_this.debug) {
-	          console.log("Sync: Received some stuff from the server", event.data);
-	        }
-	        _this.store.dispatch(JSON.parse(event.data));
-	      };
-	      this.ws.onclose = function () {
-	        if (_this.autoReconnect) {
-	          setTimeout(_this.init.bind(_this), 1000);
-	        }
-	      };
-	    }
-
-	    /**
-	     * Send an action to the server
-	     *
-	     * @param action
-	     */
-
-	  }, {
-	    key: "send",
-	    value: function send(action) {
-	      if (this.onPreSend !== null && !this.onPreSend.apply(this, [action, this.ws])) {
-	        return;
-	      }
-	      this.ws.send(JSON.stringify(action));
-	    }
-
-	    /**
-	     * Middleware for Redux
-	     * @returns {Function}
-	     */
-
-	  }, {
-	    key: "getClientMiddleware",
+	  _createClass(ReduxShareClient, [{
+	    key: 'getClientMiddleware',
 	    value: function getClientMiddleware() {
-	      var _this2 = this;
+	      var _this = this;
 
 	      return function (store) {
 	        return function (next) {
 	          return function (action) {
 	            //need to enrich next action.
-	            if (_this2.debug) {
-	              console.log('Sync: dispatching ', action);
-	            }
 	            var result = next(action);
 	            // If the action have been already emited, we don't send it back to the server
-	            if (_this2.readyToSend) {
-	              _this2.send(action);
+	            if (_this.readyToSend) {
+	              _this.send(action);
 	            }
 	            //should be migrated to a reducer?
-	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this2.init(store);
+	            if (action.type === "@@SYNC-CONNECT-SERVER-START") _this.init(store);
 	            return result;
 	          };
 	        };
 	      };
 	    }
+
+	    /**
+	     * Inits a connection with the server
+	     * @param store
+	     */
+
+	  }, {
+	    key: 'init',
+	    value: function init() {
+	      var _this2 = this;
+
+	      var store = arguments.length <= 0 || arguments[0] === undefined ? null : arguments[0];
+
+	      this.log('Initializing the socket');
+	      this.ws = new WebSocket(this.url);
+
+	      if (store === null) {
+	        throw 'You must provide a redux store as the sole parameter of the init function.';
+	      }
+
+	      this.store = store;
+
+	      this.ws.onerror = function () {
+	        _this2.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED", url: _this2.url });
+	      };
+
+	      this.ws.onopen = function () {
+	        this.log('Socket initialized, sending a dump of the full state to the server.');
+	        this.connectTriesCount = 0;
+	        //send a state dump
+	        var state = this.store.getState() || {};
+	        this.readyToSend = true;
+	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-SUCCESS", state: state });
+	      }.bind(this);
+
+	      this.ws.onmessage = function (event) {
+	        _this2.log("Received an action from the server", event.data);
+	        _this2.store.dispatch(JSON.parse(event.data));
+	      };
+
+	      this.ws.onclose = function () {
+	        _this2.readyToSend = false;
+	        _this2.log("Socket closed.");
+	        _this2.reconnect();
+	      };
+	    }
+
+	    /**
+	     * Sends an action to the server
+	     *
+	     * @param action
+	     */
+
+	  }, {
+	    key: 'send',
+	    value: function send(action) {
+	      if (typeof this.options.shouldSend == 'function' && !this.options.shouldSend(action)) {
+	        return;
+	      } else {
+	        this.log('Sending to the server the action ', action);
+	        this.ws.send(JSON.stringify(action));
+	      }
+	    }
+
+	    /**
+	    * Called internally.
+	    *
+	    */
+
+	  }, {
+	    key: 'reconnect',
+	    value: function reconnect() {
+	      if (this.options.autoReconnectMaxTries === null || this.connectTriesCount < this.options.autoReconnectMaxTries) {
+	        this.log("Reconnecting automatically... " + this.connectTriesCount++);
+	        setTimeout(this.init.bind(this, this.store), this.options.autoReconnectDelay);
+	      } else if (this.connectTriesCount == this.options.autoReconnectMaxTries) {
+	        this.log("Reached the maximum of authorized reconnect tries.");
+	        this.store.dispatch({ type: "@@SYNC-CONNECT-SERVER-FAILED-FATAL", url: this.url });
+	      }
+	    }
+
+	    /**
+	    * Internal log function
+	    *
+	    */
+
+	  }, {
+	    key: 'log',
+	    value: function log() {
+	      if (this.options.debug) {
+	        var _console;
+
+	        (_console = console).log.apply(_console, ["redux-share-client: "].concat(Array.prototype.slice.call(arguments)));
+	      }
+	    }
 	  }]);
 
-	  return SyncReduxClient;
+	  return ReduxShareClient;
 	}();
 
 	;
 
-	module.exports = SyncReduxClient;
+	module.exports = ReduxShareClient;
 
 /***/ }
 /******/ ])
