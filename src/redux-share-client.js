@@ -7,14 +7,17 @@ class ReduxShareClient {
   * @param options. 
   * 
   * defaultOptions = {
-  *     //delay between reconnect tries
-  *     autoReconnectDelay:1000,
-  *     //null for unlimited autoReconnect, 0 will disable autoReconnect, 1 will try only once etc.
-  *     autoReconnectMaxTries:null,
-  *     //callback called just before sending to the server.
-  *     shouldSend:null,
-  *     debug:false,
-  *   };
+      //delay between reconnect tries
+      autoReconnectDelay:1000,
+      //null for unlimited autoReconnect, 0 will disable autoReconnect, 1 will try only once etc.
+      autoReconnectMaxTries:null,
+      //if set, this function will be called before receiving each action. Allow you to modify the action.
+      onActionReceived: action => action,
+      //if set, this function will filter all actions before dispatching. Returns bool.
+      shouldDispatch:() => true, 
+      //if set, this function will filter all actions before sending. Returns bool.
+      shouldSend: () => true,
+      debug:false,
   *
   */
   constructor (url, options) {
@@ -22,10 +25,16 @@ class ReduxShareClient {
     const defaultOptions = {
       //delay between reconnect tries
       autoReconnectDelay:1000,
-      //null for unlimited autoReconnect, 0 will disable autoReconnect, 1 will try only once etc.
+      //null for unlimited autoReconnect, 0 | null will disable autoReconnect, 1 will try only once etc.
       autoReconnectMaxTries:null,
-      //callback called just before sending to the server.
-      shouldSend:null,
+      //if set, this function will be called before receiving each action. Allow you to modify the action.
+      onActionReceived: action => action,
+      //if set, this function will be be called when the connection is established with the server
+      onConnect: ws => true,
+      //if set, this function will filter all actions before dispatching. Returns bool.
+      shouldDispatch:() => true, 
+      //if set, this function will filter all actions before sending. Returns bool.
+      shouldSend: () => true,
       debug:false,
     };
 
@@ -41,22 +50,73 @@ class ReduxShareClient {
   /**
    * Get the middleware for Redux
    *
+
+      store.dispatch  WS
+             |        |
+             |  onActionReceived()
+             |        |
+             v        v 
+        +------------------+
+        |                  |
+        |                  |
+        |    Middleware    |
+        |                  |
+        |                  |
+        +--------+---------+
+                 |      
+         ShouldDispatch()? --------+
+                 |                 |
+      (next middleware...then)     |
+        +--------v---------+       |
+        |                  |       |
+        |                  |       |
+        |     Reducers     |       |
+        |                  |       |
+        |                  |       |
+        +--------+---------+       |
+                 |                 |
+                 |<----------------+
+                 |
+        +--------v---------+
+        |                  |
+        |    Middleware    |
+        |                  |
+        +--------+---------+
+                 |      
+                 V
+            ShouldSend()? 
+                 |
+                 V
+                 WS
+    + onConnect.
+
    * @returns {Function}
    */
-  getClientMiddleware () {
+  getReduxMiddleware () {
     return store => next => action => {
-      //need to enrich next action.
-      let result = next(action);
+
+       //should dispatch?
+      if(this.options.shouldDispatch.apply(this,action) ) {
+        var result = next(action);
+      }
+      else {
+        var result = null;
+      }
+
       // If the action have been already emited, we don't send it back to the server
       if (this.readyToSend && action.origin !== 'server') {
         this.send(action);
       }
       //should be migrated to a reducer?
       if (action.type === "@@SYNC-CONNECT-SERVER-START") this.init(store);
+
       return result;
     }
   }
 
+  getChecksum(state) {
+    return md5(JSON.stringify(state));
+  }
 
   /**
    * Inits a connection with the server
@@ -78,6 +138,10 @@ class ReduxShareClient {
 
     this.ws.onopen = function () { 
       this.log('Socket initialized, sending a dump of the full state to the server.'); 
+      if (typeof(this.options.onConnect) == 'function') {
+          this.options.onConnect.apply(this,[this.ws]);
+      }
+
       this.connectTriesCount = 0;
       //send a state dump
       let state = this.store.getState() || {};
@@ -86,8 +150,14 @@ class ReduxShareClient {
     }.bind(this);
 
     this.ws.onmessage = event => {
-      this.log("Received an action from the server", event.data);
-      this.store.dispatch(JSON.parse(event.data));
+      let action = event.data
+      this.log("Received an action from the server", action);
+
+      if (typeof(this.options.onActionReceived) == 'function') {
+          action = this.options.onActionReceived.apply(this, [action])
+      }
+
+      this.store.dispatch(JSON.parse(action));
     }
     
     this.ws.onclose = () => {
@@ -103,10 +173,7 @@ class ReduxShareClient {
    * @param action
    */
   send (action) {
-    if( typeof(this.options.shouldSend) == 'function' && !this.options.shouldSend(action)) {
-      return;
-    }
-    else {
+    if(this.options.shouldSend(action)) {
       let tracedAction = Object.assign({},action,{origin:"client" });
       this.log('Sending to the server the action ', tracedAction);
       this.ws.send(JSON.stringify(tracedAction ));
